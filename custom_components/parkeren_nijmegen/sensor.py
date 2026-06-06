@@ -123,6 +123,7 @@ class RemainingBalanceSensor(_NijmegenSensor):
     _attr_name = "Resterende parkeertijd"
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_native_unit_of_measurement = UnitOfTime.HOURS
+    _attr_suggested_unit_of_measurement = UnitOfTime.HOURS
     _attr_suggested_display_precision = 2
     _attr_icon = "mdi:timer-outline"
     _attr_state_class = SensorStateClass.MEASUREMENT
