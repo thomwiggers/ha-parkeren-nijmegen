@@ -10,8 +10,23 @@ This integration handles that response directly and silently re-logs in, so sess
 
 ## Features
 
-- Sensors: active reservations count, remaining balance (minutes), zone state (betaald/gratis)
-- Services: `parkeren_nijmegen.start_reservation`, `parkeren_nijmegen.end_reservation`
+**Sensors:**
+
+| Sensor | Description |
+|--------|-------------|
+| Actieve reserveringen | Number of currently active reservations; attributes include plate, start/end time per reservation |
+| Geplande reserveringen | Number of future (not yet started) reservations |
+| Resterende parkeertijd | Remaining balance in hours; attributes include raw minutes, active count, next end time |
+| Parkeertijdvak | `betaald` or `gratis`; attributes include next window start/end |
+| Start betaald tijdvak | Timestamp of current/next chargeable window start *(diagnostic, disabled by default)* |
+| Einde betaald tijdvak | Timestamp of current/next chargeable window end *(diagnostic, disabled by default)* |
+| Favorieten | Number of saved licence plates; attributes list all plates and names |
+
+**Actions:**
+- `parkeren_nijmegen.start_reservation` — start a visitor parking reservation
+- `parkeren_nijmegen.end_reservation` — end an active reservation
+
+**Other:**
 - Config flow with re-authentication support
 - No external library dependencies
 
