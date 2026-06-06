@@ -21,9 +21,11 @@ PLATFORMS = ["sensor"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = aiohttp_client.async_get_clientsession(hass)
-    api = NijmegenParkingAPI(session)
-    api._permit_media_code = entry.data.get(CONF_PERMIT_MEDIA_CODE)
-    api._permit_media_type_id = int(entry.data.get(CONF_PERMIT_MEDIA_TYPE_ID, 7))
+    api = NijmegenParkingAPI(
+        session,
+        permit_media_code=entry.data.get(CONF_PERMIT_MEDIA_CODE),
+        permit_media_type_id=int(entry.data.get(CONF_PERMIT_MEDIA_TYPE_ID, 7)),
+    )
 
     try:
         await api.login(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD])

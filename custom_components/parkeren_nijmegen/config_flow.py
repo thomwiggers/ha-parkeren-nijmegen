@@ -65,7 +65,10 @@ class NijmegenConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             entry = self._get_reauth_entry()
             try:
-                await self._validate_credentials(
+                (
+                    permit_media_code,
+                    permit_media_type_id,
+                ) = await self._validate_credentials(
                     user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
                 )
             except AuthError:
@@ -78,6 +81,8 @@ class NijmegenConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_updates={
                         CONF_USERNAME: user_input[CONF_USERNAME],
                         CONF_PASSWORD: user_input[CONF_PASSWORD],
+                        CONF_PERMIT_MEDIA_CODE: permit_media_code,
+                        CONF_PERMIT_MEDIA_TYPE_ID: permit_media_type_id,
                     },
                 )
         return self.async_show_form(
@@ -90,4 +95,4 @@ class NijmegenConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         session = aiohttp_client.async_get_clientsession(self.hass)
         api = NijmegenParkingAPI(session)
         await api.login(username, password)
-        return api._permit_media_code or username, api._permit_media_type_id
+        return api.permit_media_code or username, api.permit_media_type_id

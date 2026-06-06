@@ -23,7 +23,18 @@
       "cannot_connect": "Kan geen verbinding maken met de server."
     },
     "abort": {
-      "already_configured": "Al geconfigureerd."
+      "already_configured": "Al geconfigureerd.",
+      "reauth_successful": "Opnieuw inloggen geslaagd."
+    }
+  },
+  "services": {
+    "start_reservation": {
+      "name": "Start reservering",
+      "description": "Start een parkeerreservering voor een kenteken."
+    },
+    "end_reservation": {
+      "name": "Beëindig reservering",
+      "description": "Beëindig een actieve parkeerreservering."
     }
   }
 }
