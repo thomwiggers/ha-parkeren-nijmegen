@@ -21,6 +21,16 @@ def is_currently_chargeable(
     return any(block.start <= now < block.end for block in zone_validity)
 
 
+def current_or_next_window(
+    zone_validity: tuple[ZoneBlock, ...], now: datetime
+) -> ZoneBlock | None:
+    current = next((b for b in zone_validity if b.start <= now < b.end), None)
+    if current:
+        return current
+    future = [b for b in zone_validity if b.start > now]
+    return min(future, key=lambda b: b.start) if future else None
+
+
 class NijmegenCoordinator(DataUpdateCoordinator[CoordinatorData]):
     def __init__(
         self,
