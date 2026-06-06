@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -10,6 +11,8 @@ from homeassistant.exceptions import HomeAssistantError
 from .const import DOMAIN
 from .coordinator import NijmegenCoordinator
 from .exceptions import NijmegenParkingError
+
+_TZ = ZoneInfo("Europe/Amsterdam")
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,7 +42,12 @@ def _get_coordinator(hass: HomeAssistant, entry_id: str) -> NijmegenCoordinator:
 def async_register_services(hass: HomeAssistant) -> None:
     async def handle_start_reservation(call: ServiceCall) -> None:
         coordinator = _get_coordinator(hass, call.data["config_entry_id"])
-        end_time = datetime.fromisoformat(call.data["end_time"])
+        try:
+            end_time = datetime.fromisoformat(call.data["end_time"])
+        except ValueError as err:
+            raise HomeAssistantError(f"Invalid end_time: {err}") from err
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=_TZ)
         try:
             await coordinator.api.start_reservation(
                 call.data["license_plate"], end_time
