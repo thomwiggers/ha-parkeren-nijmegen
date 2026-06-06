@@ -18,7 +18,7 @@ start_reservation:
         text:
     start_time:
       name: Starttijd
-      description: Wanneer de reservering start (optioneel, standaard nu).
+      description: Wanneer de reservering start (optioneel, standaard nu+1 minuut).
       required: false
       selector:
         datetime:
@@ -26,6 +26,44 @@ start_reservation:
       name: Eindtijd
       description: Wanneer de reservering eindigt.
       required: true
+      selector:
+        datetime:
+
+update_reservation:
+  name: Wijzig reservering
+  description: >
+    Wijzig een bestaande reservering door deze te beëindigen en opnieuw aan te
+    maken. Geef ten minste één van: kenteken, starttijd, eindtijd.
+  fields:
+    device_id:
+      name: Apparaat
+      description: Het Parkeren Nijmegen apparaat.
+      required: true
+      selector:
+        device:
+          integration: parkeren_nijmegen
+    reservation_id:
+      name: Reservering ID
+      description: Het ID van de te wijzigen reservering.
+      required: true
+      selector:
+        text:
+    license_plate:
+      name: Nieuw kenteken
+      description: Het nieuwe kenteken (optioneel, huidig kenteken wordt gebruikt als leeg).
+      required: false
+      selector:
+        text:
+    start_time:
+      name: Nieuwe starttijd
+      description: Nieuwe starttijd (optioneel, huidige waarde wordt gebruikt als leeg).
+      required: false
+      selector:
+        datetime:
+    end_time:
+      name: Nieuwe eindtijd
+      description: Nieuwe eindtijd (optioneel, huidige waarde wordt gebruikt als leeg).
+      required: false
       selector:
         datetime:
 
@@ -49,7 +87,113 @@ end_reservation:
 
 list_reservations:
   name: Lijst reserveringen
-  description: Geeft een lijst van alle reserveringen terug.
+  description: >
+    Geeft een lijst van alle niet-verlopen reserveringen terug, inclusief of ze
+    actief zijn en eventuele favorietnaam.
+  fields:
+    device_id:
+      name: Apparaat
+      description: Het Parkeren Nijmegen apparaat.
+      required: true
+      selector:
+        device:
+          integration: parkeren_nijmegen
+
+add_favorite:
+  name: Voeg favoriet toe
+  description: Voeg een favoriet kenteken toe.
+  fields:
+    device_id:
+      name: Apparaat
+      description: Het Parkeren Nijmegen apparaat.
+      required: true
+      selector:
+        device:
+          integration: parkeren_nijmegen
+    license_plate:
+      name: Kenteken
+      description: Het toe te voegen kenteken.
+      required: true
+      selector:
+        text:
+    name:
+      name: Naam
+      description: Optionele naam voor het favoriet.
+      required: false
+      selector:
+        text:
+
+update_favorite:
+  name: Wijzig favoriet
+  description: Wijzig de naam van een favoriet kenteken.
+  fields:
+    device_id:
+      name: Apparaat
+      description: Het Parkeren Nijmegen apparaat.
+      required: true
+      selector:
+        device:
+          integration: parkeren_nijmegen
+    license_plate:
+      name: Kenteken
+      description: Het te wijzigen kenteken.
+      required: true
+      selector:
+        text:
+    name:
+      name: Nieuwe naam
+      description: De nieuwe naam voor het favoriet.
+      required: false
+      selector:
+        text:
+
+remove_favorite:
+  name: Verwijder favoriet
+  description: Verwijder een favoriet kenteken.
+  fields:
+    device_id:
+      name: Apparaat
+      description: Het Parkeren Nijmegen apparaat.
+      required: true
+      selector:
+        device:
+          integration: parkeren_nijmegen
+    license_plate:
+      name: Kenteken
+      description: Het te verwijderen kenteken.
+      required: true
+      selector:
+        text:
+
+list_favorites:
+  name: Lijst favorieten
+  description: Geeft alle favoriete kentekens terug.
+  fields:
+    device_id:
+      name: Apparaat
+      description: Het Parkeren Nijmegen apparaat.
+      required: true
+      selector:
+        device:
+          integration: parkeren_nijmegen
+
+get_status:
+  name: Haal status op
+  description: >
+    Geeft de huidige vergunningsstatus terug: resterend saldo, of het nu
+    betaaltijd is, en het volgende betaaltijdvak.
+  fields:
+    device_id:
+      name: Apparaat
+      description: Het Parkeren Nijmegen apparaat.
+      required: true
+      selector:
+        device:
+          integration: parkeren_nijmegen
+
+get_entry_info:
+  name: Haal integratie-info op
+  description: Geeft metadata terug over de Parkeren Nijmegen integratie-instantie.
   fields:
     device_id:
       name: Apparaat
