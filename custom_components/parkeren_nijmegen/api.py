@@ -42,13 +42,27 @@ def _format_ts(dt: datetime) -> str:
 
 
 class NijmegenParkingAPI:
-    def __init__(self, session: aiohttp.ClientSession) -> None:
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        *,
+        permit_media_code: str | None = None,
+        permit_media_type_id: int = _DEFAULT_PERMIT_MEDIA_TYPE_ID,
+    ) -> None:
         self._session = session
         self._xsrf_cookie_name: str = "Xsrf-DVSPortal"  # discovered from app.env.js
         self._username: str | None = None
         self._password: str | None = None
-        self._permit_media_type_id: int = _DEFAULT_PERMIT_MEDIA_TYPE_ID
-        self._permit_media_code: str | None = None
+        self._permit_media_type_id: int = permit_media_type_id
+        self._permit_media_code: str | None = permit_media_code
+
+    @property
+    def permit_media_code(self) -> str | None:
+        return self._permit_media_code
+
+    @property
+    def permit_media_type_id(self) -> int:
+        return self._permit_media_type_id
 
     async def _discover_xsrf_cookie_name(self) -> None:
         """Parse app.env.js to discover the XSRF cookie name for this deployment."""

@@ -30,8 +30,8 @@ async def test_config_flow_success(hass):
     ) as MockAPI:
         instance = MockAPI.return_value
         instance.login = AsyncMock()
-        instance._permit_media_code = "CARD-1"
-        instance._permit_media_type_id = 7
+        instance.permit_media_code = "CARD-1"
+        instance.permit_media_type_id = 7
 
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -97,8 +97,8 @@ async def test_config_flow_duplicate_aborts(hass):
     ) as MockAPI:
         instance = MockAPI.return_value
         instance.login = AsyncMock()
-        instance._permit_media_code = "CARD-1"
-        instance._permit_media_type_id = 7
+        instance.permit_media_code = "CARD-1"
+        instance.permit_media_type_id = 7
 
         # First entry
         result = await hass.config_entries.flow.async_init(
@@ -113,8 +113,8 @@ async def test_config_flow_duplicate_aborts(hass):
     ) as MockAPI:
         instance = MockAPI.return_value
         instance.login = AsyncMock()
-        instance._permit_media_code = "CARD-1"
-        instance._permit_media_type_id = 7
+        instance.permit_media_code = "CARD-1"
+        instance.permit_media_type_id = 7
 
         # Duplicate entry
         result = await hass.config_entries.flow.async_init(
