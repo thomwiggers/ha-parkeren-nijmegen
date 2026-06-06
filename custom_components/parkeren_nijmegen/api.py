@@ -244,11 +244,15 @@ class NijmegenParkingAPI:
         )
 
     async def start_reservation(
-        self, license_plate: str, end_time: datetime, name: str | None = None
+        self,
+        license_plate: str,
+        end_time: datetime,
+        start_time: datetime | None = None,
+        name: str | None = None,
     ) -> None:
-        """Create a reservation starting now."""
         normalized = _normalize_plate(license_plate)
-        start_time = datetime.now(UTC)
+        if start_time is None:
+            start_time = datetime.now(UTC)
         payload = {
             "permitMediaTypeID": self._permit_media_type_id,
             "permitMediaCode": self._permit_media_code,
