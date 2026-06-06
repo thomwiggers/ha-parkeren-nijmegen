@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Blue parking sign background -->
+  <rect width="256" height="256" rx="32" fill="#003D99"/>
+
+  <!-- Nijmegen red header (top section, corners match background rx=32) -->
+  <path d="M 32,0 L 224,0 A 32,32 0 0,1 256,32 L 256,68 L 0,68 L 0,32 A 32,32 0 0,1 32,0 Z"
+        fill="#C8102E"/>
+
+  <!-- White crown silhouette: 3-merlon crown representing Nijmegen's Imperial Free City status -->
+  <!-- Left merlon: x=68-96 peak y=28; center merlon: x=110-146 peak y=14; right: x=160-188 peak y=28 -->
+  <path d="M 68,62 L 68,28 L 96,28 L 96,48 L 110,48 L 110,14 L 146,14 L 146,48 L 160,48 L 160,28 L 188,28 L 188,62 Z"
+        fill="white"/>
+
+  <!-- Orbs on top of each merlon -->
+  <circle cx="82"  cy="24" r="6" fill="white"/>
+  <circle cx="128" cy="10" r="8" fill="white"/>
+  <circle cx="174" cy="24" r="6" fill="white"/>
+
+  <!-- Large parking P -->
+  <text x="128" y="210"
+        font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        font-size="164" font-weight="900" fill="white"
+        text-anchor="middle">P</text>
+</svg>
