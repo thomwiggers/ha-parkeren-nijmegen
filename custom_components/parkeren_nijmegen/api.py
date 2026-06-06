@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import urllib.parse
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
@@ -17,6 +18,7 @@ _DEFAULT_HEADERS = {
     "Accept": "application/json",
     "User-Agent": "parkeren-nijmegen-ha/0.1",
 }
+_DEFAULT_PERMIT_MEDIA_TYPE_ID = 7  # Nijmegen uses "Meldnummer" type ID 7
 
 
 def _normalize_plate(plate: str) -> str:
@@ -24,8 +26,10 @@ def _normalize_plate(plate: str) -> str:
 
 
 def _parse_ts(value: str) -> datetime:
-    """Parse provider timestamp (Amsterdam local or offset-aware) to UTC datetime."""
+    """Parse provider timestamp (UTC Z-suffix or offset-aware) to UTC datetime."""
     raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
     parsed = datetime.fromisoformat(raw)
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=_TZ, fold=0)
@@ -40,14 +44,14 @@ def _format_ts(dt: datetime) -> str:
 class NijmegenParkingAPI:
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self._session = session
-        self._token: str | None = None
-        self._xsrf_cookie_name: str = "XSRF-TOKEN"
+        self._xsrf_cookie_name: str = "Xsrf-DVSPortal"  # discovered from app.env.js
         self._username: str | None = None
         self._password: str | None = None
-        self._permit_media_type_id: int = 1
+        self._permit_media_type_id: int = _DEFAULT_PERMIT_MEDIA_TYPE_ID
         self._permit_media_code: str | None = None
 
-    async def _bootstrap_xsrf(self) -> None:
+    async def _discover_xsrf_cookie_name(self) -> None:
+        """Parse app.env.js to discover the XSRF cookie name for this deployment."""
         timeout = aiohttp.ClientTimeout(total=10)
         try:
             async with self._session.get(
@@ -59,30 +63,37 @@ class NijmegenParkingAPI:
                         self._xsrf_cookie_name = match.group(1)
         except Exception:
             pass
-        try:
-            async with self._session.get(
-                f"{BASE_URL}{APP_BASE}/", timeout=timeout
-            ) as resp:
-                await resp.read()
-        except Exception:
-            pass
 
     def _get_xsrf_token(self) -> str | None:
         cookies = self._session.cookie_jar.filter_cookies(URL(BASE_URL))
         cookie = cookies.get(self._xsrf_cookie_name)
-        return cookie.value if cookie else None
+        if cookie is None:
+            return None
+        # Cookie value may be URL-encoded
+        return urllib.parse.unquote(cookie.value)
 
     async def login(self, username: str, password: str) -> None:
+        """Authenticate against Nijmegen DVS Portal.
+
+        Sets session cookies for subsequent calls.
+        """
         self._username = username
         self._password = password
-        await self._bootstrap_xsrf()
+        await self._discover_xsrf_cookie_name()
+
         headers = {**_DEFAULT_HEADERS}
         xsrf = self._get_xsrf_token()
         if xsrf:
             headers["X-XSRF-TOKEN"] = xsrf
+
         payload = {
-            "username": username,
+            "identifier": username,
+            "loginMethod": 2,
             "password": password,
+            "otp": None,
+            "resetCode": None,
+            "asIdentifier": None,
+            "zipCode": None,
             "permitMediaTypeID": self._permit_media_type_id,
         }
         async with self._session.post(
@@ -92,26 +103,30 @@ class NijmegenParkingAPI:
                 raise AuthError("Invalid credentials")
             if resp.status >= 400:
                 raise ProviderError(f"Login failed: {resp.status}")
-            data = await resp.json()
+            data = await resp.json(content_type=None)
 
-        if data.get("LoginStatus") != 0:
-            raise AuthError(f"Login failed: {data.get('ErrorMessage')}")
+        # LoginStatus 2 = wrong credentials; ErrorMessage set = error
+        if data.get("LoginStatus") == 2 or data.get("ErrorMessage"):
+            msg = data.get("ErrorMessage", "unknown error")
+            raise AuthError(f"Login failed: {msg}")
 
-        self._token = data["Token"]
-        permit = data.get("Permit", {})
-        medias = permit.get("PermitMedias", [])
-        if medias and isinstance(medias[0], dict):
-            self._permit_media_code = medias[0].get("Code") or self._permit_media_code
+        # Cache permit media code from login response
+        permits = data.get("Permits", [])
+        if permits:
+            medias = permits[0].get("PermitMedias", [])
+            if medias and isinstance(medias[0], dict):
+                self._permit_media_code = (
+                    medias[0].get("Code") or self._permit_media_code
+                )
 
     async def _post(
         self, endpoint: str, payload: dict | None = None, *, _retry: bool = True
     ) -> dict:
-        if not self._token:
-            raise AuthError("Not authenticated")
-        headers = {
-            **_DEFAULT_HEADERS,
-            "Authorization": f"Token {self._token}",
-        }
+        """Make an authenticated POST request.
+
+        Auth is via session cookie (DVS-Cookie).
+        """
+        headers = {**_DEFAULT_HEADERS}
         xsrf = self._get_xsrf_token()
         if xsrf:
             headers["X-XSRF-TOKEN"] = xsrf
@@ -125,21 +140,21 @@ class NijmegenParkingAPI:
             if resp.status in (401, 403):
                 raise AuthError("Authentication failed")
             if resp.status == 500 and "text/html" in content_type:
-                # Nijmegen returns 500+HTML when the session token has expired.
-                # pyCityVisitorParking only checks 401/403, so re-auth never fires
-                # (issue #76).
+                # Nijmegen returns 500+HTML when the session cookie has expired.
+                # pyCityVisitorParking only checks 401/403, so re-auth
+                # never fires (issue #76).
                 if _retry and self._username and self._password:
                     await self.login(self._username, self._password)
                     return await self._post(endpoint, payload, _retry=False)
                 raise AuthError("Session expired and re-authentication failed")
             if not resp.ok:
                 raise ProviderError(f"Request failed: {resp.status}")
-            return await resp.json()
+            return await resp.json(content_type=None)
 
     def _extract_permit(self, data: dict) -> dict:
-        permit = data.get("Permit")
-        if isinstance(permit, dict) and permit:
-            return permit
+        permits = data.get("Permits")
+        if isinstance(permits, list) and permits and isinstance(permits[0], dict):
+            return permits[0]
         raise ProviderError("Response did not include permit data")
 
     def _cache_media_defaults(self, permit: dict) -> None:

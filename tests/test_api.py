@@ -1,19 +1,25 @@
+from datetime import UTC
+
 import pytest
 from aioresponses import aioresponses
 
 from custom_components.parkeren_nijmegen.api import NijmegenParkingAPI
 from custom_components.parkeren_nijmegen.const import API_BASE, APP_BASE, BASE_URL
 from custom_components.parkeren_nijmegen.exceptions import AuthError, ProviderError
-from tests.conftest import SAMPLE_LOGIN_RESPONSE, SAMPLE_PERMIT_DATA
+from tests.conftest import (
+    SAMPLE_BAD_LOGIN_RESPONSE,
+    SAMPLE_LOGIN_RESPONSE,
+    SAMPLE_PERMIT_DATA,
+)
 
 GETBASE_URL = f"{BASE_URL}{API_BASE}/login/getbase"
 LOGIN_URL = f"{BASE_URL}{API_BASE}/login"
 APP_ENV_URL = f"{BASE_URL}{APP_BASE}/app.env.js"
-APP_HTML_URL = f"{BASE_URL}{APP_BASE}/"
 
 
 def test_normalize_plate():
     from custom_components.parkeren_nijmegen.api import _normalize_plate
+
     assert _normalize_plate("AB-12-CD") == "AB12CD"
     assert _normalize_plate("ab 12 cd") == "AB12CD"
     assert _normalize_plate("AB12CD") == "AB12CD"
@@ -50,7 +56,7 @@ async def test_fetch_all_raises_provider_on_500_json(api_client):
             await api_client.fetch_all()
 
 
-async def test_fetch_all_reauths_on_500_html(api_client, http_session):
+async def test_fetch_all_reauths_on_500_html(api_client):
     """Core fix: 500+HTML triggers re-login and retry (issue #76)."""
     with aioresponses() as m:
         # First getbase call: Nijmegen session-expiry response
@@ -60,19 +66,15 @@ async def test_fetch_all_reauths_on_500_html(api_client, http_session):
             content_type="text/html; charset=utf-8",
             body="<html>Bezoekers App</html>",
         )
-        # XSRF bootstrap during re-login
-        m.get(
-            APP_ENV_URL,
-            status=200,
-            body='window.__env.xsrfCookieName = "XSRF-TOKEN"',
-        )
-        m.get(APP_HTML_URL, status=200, body="<html></html>")
+        # XSRF discovery during re-login
+        xsrf_body = 'window.__env.xsrfCookieName = "Xsrf-DVSPortal"'
+        m.get(APP_ENV_URL, status=200, body=xsrf_body)
         # Re-login succeeds
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
         # Retry getbase succeeds
         m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
 
-        permit, reservations, favorites = await api_client.fetch_all()
+        permit, _, _ = await api_client.fetch_all()
 
     assert permit.remaining_balance == 120
 
@@ -87,7 +89,6 @@ async def test_fetch_all_raises_auth_if_retry_also_fails(api_client):
             body="<html></html>",
         )
         m.get(APP_ENV_URL, status=404)
-        m.get(APP_HTML_URL, status=404)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
         m.post(
             GETBASE_URL,
@@ -100,32 +101,37 @@ async def test_fetch_all_raises_auth_if_retry_also_fails(api_client):
             await api_client.fetch_all()
 
 
-async def test_login_sets_token(http_session):
+async def test_login_sets_media_code(http_session):
+    """Login with correct payload sets _permit_media_code from response."""
     api = NijmegenParkingAPI(http_session)
     with aioresponses() as m:
-        m.get(
-            APP_ENV_URL,
-            status=200,
-            body='window.__env.xsrfCookieName = "XSRF-TOKEN"',
-        )
-        m.get(APP_HTML_URL, status=200, body="<html></html>")
+        xsrf_body = 'window.__env.xsrfCookieName = "Xsrf-DVSPortal"'
+        m.get(APP_ENV_URL, status=200, body=xsrf_body)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
 
-        await api.login("user", "pass")
+        await api.login("334412", "8563")
 
-    assert api._token == "test-token-abc"
     assert api._permit_media_code == "CARD-1"
+    assert api._username == "334412"
 
 
 async def test_login_raises_auth_on_bad_credentials(http_session):
+    """LoginStatus 2 with ErrorMessage triggers AuthError."""
     api = NijmegenParkingAPI(http_session)
     with aioresponses() as m:
         m.get(APP_ENV_URL, status=404)
-        m.get(APP_HTML_URL, status=404)
-        m.post(
-            LOGIN_URL,
-            payload={"LoginStatus": 1, "Token": None, "ErrorMessage": "Invalid"},
-        )
+        m.post(LOGIN_URL, payload=SAMPLE_BAD_LOGIN_RESPONSE)
 
         with pytest.raises(AuthError):
-            await api.login("user", "wrongpass")
+            await api.login("334412", "wrongpass")
+
+
+async def test_parse_ts_utc_z_suffix():
+    """BlockTimes from real API use Z suffix UTC timestamps."""
+
+    from custom_components.parkeren_nijmegen.api import _parse_ts
+
+    dt = _parse_ts("2024-01-02T08:00:00Z")
+    assert dt.tzinfo == UTC
+    assert dt.hour == 8
+    assert dt.day == 2
