@@ -30,10 +30,11 @@ class NijmegenConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             try:
-                permit_media_code, permit_media_type_id = (
-                    await self._validate_credentials(
-                        user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
-                    )
+                (
+                    permit_media_code,
+                    permit_media_type_id,
+                ) = await self._validate_credentials(
+                    user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
                 )
             except AuthError:
                 errors["base"] = "invalid_auth"

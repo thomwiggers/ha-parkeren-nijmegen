@@ -18,11 +18,13 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: NijmegenCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([
-        ActiveReservationsSensor(coordinator, entry),
-        RemainingBalanceSensor(coordinator, entry),
-        ZoneStateSensor(coordinator, entry),
-    ])
+    async_add_entities(
+        [
+            ActiveReservationsSensor(coordinator, entry),
+            RemainingBalanceSensor(coordinator, entry),
+            ZoneStateSensor(coordinator, entry),
+        ]
+    )
 
 
 class _NijmegenSensor(CoordinatorEntity[NijmegenCoordinator], SensorEntity):
@@ -77,6 +79,8 @@ class ZoneStateSensor(_NijmegenSensor):
         if not self.coordinator.data:
             return "unknown"
         now = datetime.now(UTC)
-        return "betaald" if is_currently_chargeable(
-            self.coordinator.data.permit.zone_validity, now
-        ) else "gratis"
+        return (
+            "betaald"
+            if is_currently_chargeable(self.coordinator.data.permit.zone_validity, now)
+            else "gratis"
+        )

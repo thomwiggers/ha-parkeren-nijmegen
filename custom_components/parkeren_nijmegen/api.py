@@ -141,8 +141,6 @@ class NijmegenParkingAPI:
                 raise AuthError("Authentication failed")
             if resp.status == 500 and "text/html" in content_type:
                 # Nijmegen returns 500+HTML when the session cookie has expired.
-                # pyCityVisitorParking only checks 401/403, so re-auth
-                # never fires (issue #76).
                 if _retry and self._username and self._password:
                     await self.login(self._username, self._password)
                     return await self._post(endpoint, payload, _retry=False)

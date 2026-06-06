@@ -60,6 +60,7 @@ async def test_start_reservation_calls_api(hass, setup_integration):
     coordinator.api.start_reservation.assert_called_once()
     call_args = coordinator.api.start_reservation.call_args
     assert call_args[0][0] == "AB12CD"
+    assert call_args[0][1].tzinfo is not None
     coordinator.async_request_refresh.assert_called_once()
 
 
@@ -93,6 +94,22 @@ async def test_start_reservation_raises_on_api_error(hass, setup_integration):
                 "config_entry_id": "test-entry-id",
                 "license_plate": "AB12CD",
                 "end_time": end_time,
+            },
+            blocking=True,
+        )
+
+
+async def test_end_reservation_raises_on_api_error(hass, setup_integration):
+    entry, coordinator = setup_integration
+    coordinator.api.end_reservation = AsyncMock(side_effect=ProviderError("failed"))
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "end_reservation",
+            {
+                "config_entry_id": "test-entry-id",
+                "reservation_id": "123",
             },
             blocking=True,
         )
