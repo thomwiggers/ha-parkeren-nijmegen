@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -57,6 +57,7 @@ class _NijmegenSensor(CoordinatorEntity[NijmegenCoordinator], SensorEntity):
             name=entry.title,
             manufacturer="Bezoekersparkeren Nijmegen",
             model="DVS Parkeerportal",
+            entry_type=DeviceEntryType.SERVICE,
         )
 
 
