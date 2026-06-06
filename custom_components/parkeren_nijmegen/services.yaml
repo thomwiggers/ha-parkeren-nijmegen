@@ -1,0 +1,42 @@
+start_reservation:
+  name: Start reservering
+  description: Start een parkeerreservering voor een kenteken.
+  fields:
+    config_entry_id:
+      name: Integratie
+      description: De Parkeren Nijmegen integratie.
+      required: true
+      selector:
+        config_entry:
+          integration: parkeren_nijmegen
+    license_plate:
+      name: Kenteken
+      description: Het kenteken van de bezoeker (bijv. AB12CD).
+      required: true
+      example: "AB12CD"
+      selector:
+        text:
+    end_time:
+      name: Eindtijd
+      description: Wanneer de reservering eindigt (ISO 8601 datetime string).
+      required: true
+      selector:
+        datetime:
+
+end_reservation:
+  name: Beëindig reservering
+  description: Beëindig een actieve parkeerreservering.
+  fields:
+    config_entry_id:
+      name: Integratie
+      description: De Parkeren Nijmegen integratie.
+      required: true
+      selector:
+        config_entry:
+          integration: parkeren_nijmegen
+    reservation_id:
+      name: Reservering ID
+      description: Het ID van de te beëindigen reservering.
+      required: true
+      selector:
+        text:

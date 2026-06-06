@@ -14,6 +14,7 @@ from .const import (
 )
 from .coordinator import NijmegenCoordinator
 from .exceptions import AuthError
+from .services import async_register_services
 
 PLATFORMS = ["sensor"]
 
@@ -35,6 +36,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    if not hass.services.has_service(DOMAIN, "start_reservation"):
+        async_register_services(hass)
+
     return True
 
 
@@ -42,4 +47,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        if not hass.data.get(DOMAIN):
+            hass.services.async_remove(DOMAIN, "start_reservation")
+            hass.services.async_remove(DOMAIN, "end_reservation")
     return unloaded
