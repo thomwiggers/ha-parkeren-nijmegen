@@ -28,7 +28,7 @@ Cookie-based (not token). `login()` POSTs to `/DVSPortal/api/login` with `{ident
 |------|---------------|
 | `api.py` | All HTTP: XSRF discovery, login, `_post` with 500+HTML re-auth, fetch/mutate |
 | `coordinator.py` | `DataUpdateCoordinator` — polls every 5 min, converts `AuthError` → `async_start_reauth` |
-| `sensor.py` | Three entities: active reservation count, remaining minutes, zone state (betaald/gratis) |
+| `sensor.py` | Seven entities: active/future reservations, remaining time (hours), zone state, chargeable window timestamps, favorites |
 | `config_flow.py` | Config flow + reauth flow; persists `permit_media_code` and `permit_media_type_id` |
 | `__init__.py` | Entry setup (login → coordinator → sensors → services), teardown |
 | `services.py` | `start_reservation` / `end_reservation` HA service handlers |
