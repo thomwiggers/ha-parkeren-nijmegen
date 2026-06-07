@@ -41,8 +41,23 @@ async def test_fetch_all_success(api_client):
     assert favorites[0].name == "Family"
 
 
-async def test_fetch_all_raises_auth_on_401(api_client):
+async def test_fetch_all_reauths_on_401(api_client):
+    """401 triggers re-login + retry (some endpoints return 401 on session expiry)."""
     with aioresponses() as m:
+        m.post(GETBASE_URL, status=401)
+        m.get(APP_ENV_URL, status=200, body='window.__env.xsrfCookieName = "Xsrf-DVSPortal"')
+        m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
+        permit, _, _ = await api_client.fetch_all()
+    assert permit.remaining_balance == 120
+
+
+async def test_fetch_all_raises_auth_if_401_retry_also_fails(api_client):
+    """If re-auth succeeds but retry still 401s, raise AuthError."""
+    with aioresponses() as m:
+        m.post(GETBASE_URL, status=401)
+        m.get(APP_ENV_URL, status=404)
+        m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
         m.post(GETBASE_URL, status=401)
         with pytest.raises(AuthError):
             await api_client.fetch_all()
