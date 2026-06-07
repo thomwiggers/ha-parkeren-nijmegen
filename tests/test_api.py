@@ -126,6 +126,67 @@ async def test_login_raises_auth_on_bad_credentials(http_session):
             await api.login("334412", "wrongpass")
 
 
+async def test_add_favorite_payload(api_client):
+    """add_favorite sends updateLicensePlate as string and info field."""
+    from unittest.mock import AsyncMock, patch
+
+    captured = {}
+
+    async def fake_post(endpoint, payload=None, **kwargs):
+        captured["endpoint"] = endpoint
+        captured["payload"] = payload
+        return {}
+
+    with patch.object(api_client, "_post", side_effect=fake_post):
+        await api_client.add_favorite("AB-12-CD", "Jan")
+
+    assert captured["endpoint"] == "/permitmedialicenseplate/upsert"
+    sent = captured["payload"]
+    assert sent["licensePlate"] == {"Value": "AB12CD", "Name": "Jan"}
+    assert sent["updateLicensePlate"] == "AB12CD"
+    assert sent["info"] == "Jan"
+    assert sent["name"] == "Jan"
+
+
+async def test_add_favorite_payload_no_name(api_client):
+    """add_favorite without name uses normalized plate for name and info."""
+    from unittest.mock import patch
+
+    captured = {}
+
+    async def fake_post(endpoint, payload=None, **kwargs):
+        captured["payload"] = payload
+        return {}
+
+    with patch.object(api_client, "_post", side_effect=fake_post):
+        await api_client.add_favorite("AB12CD")
+
+    sent = captured["payload"]
+    assert sent["updateLicensePlate"] == "AB12CD"
+    assert sent["info"] == "AB12CD"
+
+
+async def test_remove_favorite_payload(api_client):
+    """remove_favorite sends licensePlate as string with Name and info fields."""
+    from unittest.mock import patch
+
+    captured = {}
+
+    async def fake_post(endpoint, payload=None, **kwargs):
+        captured["endpoint"] = endpoint
+        captured["payload"] = payload
+        return {}
+
+    with patch.object(api_client, "_post", side_effect=fake_post):
+        await api_client.remove_favorite("AB-12-CD")
+
+    assert captured["endpoint"] == "/permitmedialicenseplate/remove"
+    sent = captured["payload"]
+    assert sent["licensePlate"] == "AB12CD"
+    assert sent["Name"] == "AB12CD"
+    assert sent["info"] == "AB12CD"
+
+
 async def test_parse_ts_utc_z_suffix():
     """BlockTimes from real API use Z suffix UTC timestamps."""
 

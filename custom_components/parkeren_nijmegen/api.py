@@ -281,8 +281,9 @@ class NijmegenParkingAPI:
             "permitMediaTypeID": self._permit_media_type_id,
             "permitMediaCode": self._permit_media_code,
             "licensePlate": {"Value": normalized, "Name": name_value},
-            "updateLicensePlate": None,
+            "updateLicensePlate": normalized,
             "name": name_value,
+            "info": name_value,
         }
         await self._post("/permitmedialicenseplate/upsert", payload)
 
@@ -292,6 +293,7 @@ class NijmegenParkingAPI:
             "permitMediaTypeID": self._permit_media_type_id,
             "permitMediaCode": self._permit_media_code,
             "licensePlate": normalized,
-            "name": normalized,
+            "Name": normalized,
+            "info": normalized,
         }
         await self._post("/permitmedialicenseplate/remove", payload)
