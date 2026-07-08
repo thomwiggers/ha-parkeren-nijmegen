@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import aiohttp_client
+from homeassistant.helpers.typing import ConfigType
 
 from .api import NijmegenParkingAPI
 from .const import (
@@ -17,6 +21,22 @@ from .exceptions import AuthError
 from .services import async_register_services
 
 PLATFORMS = ["sensor"]
+
+CARD_JS_FILENAME = "parkeren-nijmegen-cards.js"
+CARD_URL_PATH = f"/{DOMAIN}/{CARD_JS_FILENAME}"
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(
+                CARD_URL_PATH,
+                str(Path(__file__).parent / "www" / CARD_JS_FILENAME),
+                cache_headers=False,
+            )
+        ]
+    )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
