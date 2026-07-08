@@ -74,13 +74,26 @@
       this._status = null;
       this._statusType = 'info';
       this._stOut = null;
+      this._lastHassKey = null;
     }
 
     setConfig(config) { this._config = config; this._render(); }
 
+    _hassKey(hass) {
+      const zone = hass.states[ZONE_ENTITY];
+      return [
+        zone?.state, zone?.attributes?.next_window_start, zone?.attributes?.next_window_end,
+        hass.states[BALANCE_ENTITY]?.state,
+        JSON.stringify(hass.states[FAVORITES_ENTITY]?.attributes?.license_plates),
+      ].join('|');
+    }
+
     set hass(hass) {
       this._hass = hass;
       this._initDefaultTimes();
+      const key = this._hassKey(hass);
+      if (key === this._lastHassKey) return;
+      this._lastHassKey = key;
       if (this.shadowRoot.activeElement) return;
       this._render();
     }
@@ -369,10 +382,9 @@
     set hass(hass) {
       this._hass = hass;
       const key = `${hass.states[ACTIVE_ENTITY]?.state}:${hass.states[PLANNED_ENTITY]?.state}`;
-      if (key !== this._lastResKey) {
-        this._lastResKey = key;
-        void this._fetchReservations();
-      }
+      if (key === this._lastResKey) return;
+      this._lastResKey = key;
+      void this._fetchReservations();
       this._render();
     }
 
