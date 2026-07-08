@@ -40,6 +40,16 @@ This integration handles that response directly and silently re-logs in, so sess
 **Manual:**
 Copy `custom_components/parkeren_nijmegen/` to `<config>/custom_components/parkeren_nijmegen/`, restart HA, then add the integration.
 
+## Lovelace card
+
+The integration ships a custom Lovelace card (new-reservation card + `parkeren-actief-card`) served directly by the integration at `/parkeren_nijmegen/parkeren-nijmegen-cards.js` — no separate frontend install needed.
+
+Add it as a dashboard resource (Settings → Dashboards → ⋮ → Resources → Add Resource):
+- URL: `/parkeren_nijmegen/parkeren-nijmegen-cards.js`
+- Resource type: JavaScript Module
+
+Then add a card with `type: custom:parkeren-actief-card` to a dashboard.
+
 ## Configuration
 
 Enter your **meldnummer** (account number) and **PIN-code** from the Nijmegen parking portal. The integration stores your permit media code so it survives re-authentication.
