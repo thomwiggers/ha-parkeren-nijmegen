@@ -45,7 +45,11 @@ async def test_fetch_all_reauths_on_401(api_client):
     """401 triggers re-login + retry (some endpoints return 401 on session expiry)."""
     with aioresponses() as m:
         m.post(GETBASE_URL, status=401)
-        m.get(APP_ENV_URL, status=200, body='window.__env.xsrfCookieName = "Xsrf-DVSPortal"')
+        m.get(
+            APP_ENV_URL,
+            status=200,
+            body='window.__env.xsrfCookieName = "Xsrf-DVSPortal"',
+        )
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
         m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
         permit, _, _ = await api_client.fetch_all()
@@ -143,7 +147,7 @@ async def test_login_raises_auth_on_bad_credentials(http_session):
 
 async def test_add_favorite_payload(api_client):
     """add_favorite sends updateLicensePlate as string and info field."""
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import patch
 
     captured = {}
 
