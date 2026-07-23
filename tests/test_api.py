@@ -128,7 +128,7 @@ async def test_login_sets_media_code(http_session):
         m.get(APP_ENV_URL, status=200, body=xsrf_body)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
 
-        await api.login("123456", "8563")
+        await api.login("123456", "testpass")
 
     assert api._permit_media_code == "CARD-1"
     assert api._username == "123456"
