@@ -2,13 +2,54 @@
   'use strict';
 
   const DOMAIN = 'parkeren_nijmegen';
-  const DEVICE_ID = 'e177cab4e99c2862de5c81d8b1bf5258';
 
-  const FAVORITES_ENTITY = 'sensor.nijmegen_334412_favorieten';
-  const ZONE_ENTITY = 'sensor.parkeertijdvak';
-  const BALANCE_ENTITY = 'sensor.resterende_minuten';
-  const ACTIVE_ENTITY = 'sensor.actieve_reserveringen';
-  const PLANNED_ENTITY = 'sensor.nijmegen_334412_geplande_reserveringen';
+  // Entity/device IDs are instance-specific (they embed the user's account
+  // identifier), so they're discovered at runtime from the entity/device
+  // registries instead of being hardcoded here. Each sensor is identified by
+  // an attribute unique to its role, since names/entity_ids are localized
+  // and vary per installation.
+  let _resolvedCache = null;
+
+  function resolveIntegration(hass) {
+    if (_resolvedCache) return _resolvedCache;
+    if (!hass || !hass.devices || !hass.entities) return null;
+
+    const device = Object.values(hass.devices).find(d =>
+      (d.identifiers || []).some(([domain]) => domain === DOMAIN)
+    );
+    if (!device) return null;
+
+    const candidateIds = Object.values(hass.entities)
+      .filter(e => e.platform === DOMAIN && e.device_id === device.id)
+      .map(e => e.entity_id);
+
+    const findBy = (pred) => candidateIds.find(id => {
+      const st = hass.states[id];
+      return st && pred(st.attributes || {});
+    });
+
+    const zone = findBy(a => 'is_chargeable_now' in a);
+    const balance = findBy(a => 'remaining_minutes' in a);
+    const active = findBy(a => Array.isArray(a.reservations));
+    const favorites = findBy(a => Array.isArray(a.license_plates));
+    const planned = candidateIds.find(id => {
+      if ([zone, balance, active, favorites].includes(id)) return false;
+      const st = hass.states[id];
+      return st && st.attributes?.device_class !== 'timestamp';
+    });
+
+    if (!zone || !balance || !active || !favorites || !planned) return null;
+
+    _resolvedCache = {
+      deviceId: device.id,
+      ZONE_ENTITY: zone,
+      BALANCE_ENTITY: balance,
+      ACTIVE_ENTITY: active,
+      FAVORITES_ENTITY: favorites,
+      PLANNED_ENTITY: planned,
+    };
+    return _resolvedCache;
+  }
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -75,21 +116,24 @@
       this._statusType = 'info';
       this._stOut = null;
       this._lastHassKey = null;
+      this._res = null;
     }
 
     setConfig(config) { this._config = config; this._render(); }
 
     _hassKey(hass) {
-      const zone = hass.states[ZONE_ENTITY];
+      if (!this._res) return 'unresolved';
+      const zone = hass.states[this._res.ZONE_ENTITY];
       return [
         zone?.state, zone?.attributes?.next_window_start, zone?.attributes?.next_window_end,
-        hass.states[BALANCE_ENTITY]?.state,
-        JSON.stringify(hass.states[FAVORITES_ENTITY]?.attributes?.license_plates),
+        hass.states[this._res.BALANCE_ENTITY]?.state,
+        JSON.stringify(hass.states[this._res.FAVORITES_ENTITY]?.attributes?.license_plates),
       ].join('|');
     }
 
     set hass(hass) {
       this._hass = hass;
+      this._res = this._res || resolveIntegration(hass);
       this._initDefaultTimes();
       const key = this._hassKey(hass);
       if (key === this._lastHassKey) return;
@@ -99,8 +143,8 @@
     }
 
     _initDefaultTimes() {
-      if (this._vals.end) return;
-      const zone = this._hass?.states[ZONE_ENTITY];
+      if (this._vals.end || !this._res) return;
+      const zone = this._hass?.states[this._res.ZONE_ENTITY];
       if (!zone) return;
       const now = new Date();
       if (!this._vals.start) {
@@ -128,11 +172,12 @@
     }
 
     _favs() {
-      return this._hass?.states[FAVORITES_ENTITY]?.attributes?.license_plates || [];
+      if (!this._res) return [];
+      return this._hass?.states[this._res.FAVORITES_ENTITY]?.attributes?.license_plates || [];
     }
 
     _zoneLabel() {
-      const z = this._hass?.states[ZONE_ENTITY];
+      const z = this._res && this._hass?.states[this._res.ZONE_ENTITY];
       if (!z) return '';
       return (z.state === 'betaald' || z.attributes?.is_chargeable_now)
         ? '⚠ Betaalde zone actief'
@@ -140,7 +185,7 @@
     }
 
     _balanceLabel() {
-      const b = this._hass?.states[BALANCE_ENTITY];
+      const b = this._res && this._hass?.states[this._res.BALANCE_ENTITY];
       if (!b) return '';
       const h = parseFloat(b.state);
       return isNaN(h) ? '' : `${h.toFixed(1)} h tegoed`;
@@ -153,7 +198,7 @@
     }
 
     async _start() {
-      if (this._busy) return;
+      if (this._busy || !this._res) return;
       const plate = this._normPlate(this._vals.plate);
       if (!plate) { this._setStatus('Voer een kenteken in', 'warning'); return; }
       const start = parseDT(this._vals.start);
@@ -163,7 +208,7 @@
       this._busy = true; this._render();
       try {
         await this._hass.callService(DOMAIN, 'start_reservation', {
-          device_id: DEVICE_ID, license_plate: plate,
+          device_id: this._res.deviceId, license_plate: plate,
           start_time: start.toISOString(), end_time: end.toISOString(),
         });
         this._vals.plate = '';
@@ -176,11 +221,12 @@
     }
 
     async _addFav(plate, name) {
+      if (!this._res) return;
       if (!plate) { this._setStatus('Voer een kenteken in', 'warning'); return; }
       if (this._isFav(plate)) { this._setStatus('Al een favoriet', 'warning'); return; }
       try {
         await this._hass.callService(DOMAIN, 'add_favorite', {
-          device_id: DEVICE_ID, license_plate: plate,
+          device_id: this._res.deviceId, license_plate: plate,
           ...(name ? { name } : {}),
         });
         this._addFavVals = { plate: '', name: '' };
@@ -192,8 +238,9 @@
     }
 
     async _rmFav(plate) {
+      if (!this._res) return;
       try {
-        await this._hass.callService(DOMAIN, 'remove_favorite', { device_id: DEVICE_ID, license_plate: plate });
+        await this._hass.callService(DOMAIN, 'remove_favorite', { device_id: this._res.deviceId, license_plate: plate });
         this._setStatus('Favoriet verwijderd', 'success', 5000);
       } catch (e) {
         this._setStatus('Fout: ' + (e?.message || String(e)), 'warning');
@@ -207,6 +254,10 @@
 
     _render() {
       if (!this._config || !this._hass) return;
+      if (!this._res) {
+        this.shadowRoot.innerHTML = `<ha-card><div class="content">Parkeren Nijmegen entiteiten niet gevonden.</div></ha-card>`;
+        return;
+      }
       const cfg = this._config;
       const showStart = cfg.show_start_time !== false;
       const showEnd = cfg.show_end_time !== false;
@@ -375,13 +426,16 @@
       this._stOut = null;
       this._resList = null;
       this._lastResKey = null;
+      this._res = null;
     }
 
     setConfig(config) { this._config = config; this._render(); }
 
     set hass(hass) {
       this._hass = hass;
-      const key = `${hass.states[ACTIVE_ENTITY]?.state}:${hass.states[PLANNED_ENTITY]?.state}`;
+      this._res = this._res || resolveIntegration(hass);
+      if (!this._res) { this._render(); return; }
+      const key = `${hass.states[this._res.ACTIVE_ENTITY]?.state}:${hass.states[this._res.PLANNED_ENTITY]?.state}`;
       if (key === this._lastResKey) return;
       this._lastResKey = key;
       void this._fetchReservations();
@@ -389,8 +443,9 @@
     }
 
     async _fetchReservations() {
+      if (!this._res) return;
       try {
-        const result = await this._hass.callService(DOMAIN, 'list_reservations', { device_id: DEVICE_ID }, undefined, false, true);
+        const result = await this._hass.callService(DOMAIN, 'list_reservations', { device_id: this._res.deviceId }, undefined, false, true);
         this._resList = result?.response?.reservations || result?.reservations || [];
         this._render();
       } catch (e) {
@@ -407,10 +462,10 @@
     }
 
     async _end(id) {
-      if (this._busy.has(id)) return;
+      if (this._busy.has(id) || !this._res) return;
       this._busy.add(id); this._render();
       try {
-        await this._hass.callService(DOMAIN, 'end_reservation', { device_id: DEVICE_ID, reservation_id: id });
+        await this._hass.callService(DOMAIN, 'end_reservation', { device_id: this._res.deviceId, reservation_id: id });
         this._resList = (this._resList || []).filter(r => (r.id || r.reservation_id) !== id);
         this._setStatus('Reservering beëindigd', 'success', 5000);
       } catch (e) {
@@ -422,6 +477,10 @@
 
     _render() {
       if (!this._config || !this._hass) return;
+      if (!this._res) {
+        this.shadowRoot.innerHTML = `<ha-card><div class="content">Parkeren Nijmegen entiteiten niet gevonden.</div></ha-card>`;
+        return;
+      }
       const reservations = this._resList;
 
       this.shadowRoot.innerHTML = `
