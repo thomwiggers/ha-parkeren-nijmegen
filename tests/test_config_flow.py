@@ -38,11 +38,11 @@ async def test_config_flow_success(hass):
         )
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_USERNAME: "334412", CONF_PASSWORD: "8563"},
+            {CONF_USERNAME: "123456", CONF_PASSWORD: "8563"},
         )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert result["data"][CONF_USERNAME] == "334412"
+    assert result["data"][CONF_USERNAME] == "123456"
     assert result["data"][CONF_PASSWORD] == "8563"
     assert result["data"]["permit_media_code"] == "CARD-1"
     assert result["data"]["permit_media_type_id"] == 7
@@ -62,7 +62,7 @@ async def test_config_flow_invalid_auth(hass):
         )
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_USERNAME: "334412", CONF_PASSWORD: "wrong"},
+            {CONF_USERNAME: "123456", CONF_PASSWORD: "wrong"},
         )
 
     assert result["type"] == FlowResultType.FORM
@@ -84,7 +84,7 @@ async def test_config_flow_cannot_connect(hass):
         )
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_USERNAME: "334412", CONF_PASSWORD: "8563"},
+            {CONF_USERNAME: "123456", CONF_PASSWORD: "8563"},
         )
 
     assert result["type"] == FlowResultType.FORM
@@ -105,7 +105,7 @@ async def test_config_flow_duplicate_aborts(hass):
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
         await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_USERNAME: "334412", CONF_PASSWORD: "8563"}
+            result["flow_id"], {CONF_USERNAME: "123456", CONF_PASSWORD: "8563"}
         )
 
     with patch(
@@ -121,7 +121,7 @@ async def test_config_flow_duplicate_aborts(hass):
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_USERNAME: "334412", CONF_PASSWORD: "8563"}
+            result["flow_id"], {CONF_USERNAME: "123456", CONF_PASSWORD: "8563"}
         )
 
     assert result["type"] == FlowResultType.ABORT
