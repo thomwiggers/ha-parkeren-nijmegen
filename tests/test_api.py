@@ -128,10 +128,10 @@ async def test_login_sets_media_code(http_session):
         m.get(APP_ENV_URL, status=200, body=xsrf_body)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
 
-        await api.login("REDACTED_USER", "REDACTED_PASS")
+        await api.login("123456", "testpass")
 
     assert api._permit_media_code == "CARD-1"
-    assert api._username == "REDACTED_USER"
+    assert api._username == "123456"
 
 
 async def test_login_raises_auth_on_bad_credentials(http_session):
@@ -142,7 +142,7 @@ async def test_login_raises_auth_on_bad_credentials(http_session):
         m.post(LOGIN_URL, payload=SAMPLE_BAD_LOGIN_RESPONSE)
 
         with pytest.raises(AuthError):
-            await api.login("REDACTED_USER", "wrongpass")
+            await api.login("123456", "wrongpass")
 
 
 async def test_add_favorite_payload(api_client):
