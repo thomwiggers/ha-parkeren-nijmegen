@@ -67,6 +67,32 @@ async def test_fetch_all_raises_auth_if_401_retry_also_fails(api_client):
             await api_client.fetch_all()
 
 
+async def test_fetch_all_reauths_on_403(api_client):
+    """403 also triggers re-login + retry, same as 401 (session expiry)."""
+    with aioresponses() as m:
+        m.post(GETBASE_URL, status=403)
+        m.get(
+            APP_ENV_URL,
+            status=200,
+            body='window.__env.xsrfCookieName = "Xsrf-DVSPortal"',
+        )
+        m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
+        permit, _, _ = await api_client.fetch_all()
+    assert permit.remaining_balance == 120
+
+
+async def test_fetch_all_raises_auth_if_403_retry_also_fails(api_client):
+    """If re-auth succeeds but retry still 403s, raise AuthError."""
+    with aioresponses() as m:
+        m.post(GETBASE_URL, status=403)
+        m.get(APP_ENV_URL, status=404)
+        m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.post(GETBASE_URL, status=403)
+        with pytest.raises(AuthError):
+            await api_client.fetch_all()
+
+
 async def test_fetch_all_raises_provider_on_500_json(api_client):
     """500 with JSON body is a real provider error, not session expiry."""
     with aioresponses() as m:

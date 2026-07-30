@@ -151,15 +151,13 @@ class NijmegenParkingAPI:
             headers=headers,
         ) as resp:
             content_type = resp.headers.get("Content-Type", "")
-            if resp.status == 401:
-                # Some endpoints (e.g. permitmedialicenseplate) return 401 on
-                # session expiry instead of 500+HTML.
+            if resp.status in (401, 403):
+                # Some endpoints (e.g. permitmedialicenseplate) return 401 or
+                # 403 on session expiry instead of 500+HTML.
                 if _retry and self._username and self._password:
                     await self.login(self._username, self._password)
                     return await self._post(endpoint, payload, _retry=False)
-                raise AuthError("Authentication failed")
-            if resp.status == 403:
-                raise AuthError("Authentication failed")
+                raise AuthError(f"Authentication failed ({resp.status} on {endpoint})")
             if resp.status == 500 and "text/html" in content_type:
                 # Nijmegen returns 500+HTML when the session cookie has expired.
                 if _retry and self._username and self._password:
