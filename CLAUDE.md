@@ -12,6 +12,19 @@ uv run ruff check custom_components/ tests/   # lint
 uv run ruff format custom_components/ tests/  # format
 ```
 
+## Commit / PR conventions
+
+- Squash-merge only (repo setting) — each PR becomes exactly one commit on `main`.
+- PR titles must be conventional-commit style: `<type>: <description>`, type one of
+  `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `style`, `revert`.
+  Enforced by `.github/workflows/pr-title-lint.yaml`; non-conforming titles fail the check.
+- Releases are cut automatically by `python-semantic-release` (`.github/workflows/ci.yaml`,
+  `release` job) from `feat`/`fix`/`BREAKING CHANGE` commits on `main` since the last tag.
+  Never hand-bump `version` in `manifest.json` or `pyproject.toml` — the release job does
+  this, tags `vX.Y.Z`, updates `CHANGELOG.md`, and creates the GitHub Release. A push with
+  no releasable commit type is a no-op (no release cut), by design.
+- Config: `[tool.semantic_release]` in `pyproject.toml`.
+
 ## Architecture
 
 Standalone Home Assistant custom integration for Nijmegen visitor parking. No external library — all HTTP logic lives here.

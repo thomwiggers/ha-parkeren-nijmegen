@@ -11,6 +11,7 @@ dev = [
     "pytest-homeassistant-custom-component>=0.13",
     "aioresponses>=0.7",
     "ruff>=0.8",
+    "python-semantic-release>=9",
 ]
 
 [tool.pytest.ini_options]
@@ -26,3 +27,11 @@ packages = ["custom_components/parkeren_nijmegen"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["custom_components/parkeren_nijmegen/manifest.json:version"]
+branch = "main"
+build_command = ""
+commit_message = "chore(release): v{version} [skip ci]"
+tag_format = "v{version}"
