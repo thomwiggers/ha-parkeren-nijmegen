@@ -57,13 +57,13 @@ async def test_fetch_all_reauths_on_401(api_client):
 
 
 async def test_fetch_all_raises_auth_if_401_retry_also_fails(api_client):
-    """If re-auth succeeds but retry still 401s, raise AuthError."""
+    """If re-auth succeeds but retry still 401s, raise AuthError with server body."""
     with aioresponses() as m:
         m.post(GETBASE_URL, status=401)
         m.get(APP_ENV_URL, status=404)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.post(GETBASE_URL, status=401)
-        with pytest.raises(AuthError):
+        m.post(GETBASE_URL, status=401, body="Not authorized for this permit medium")
+        with pytest.raises(AuthError, match="Not authorized for this permit medium"):
             await api_client.fetch_all()
 
 

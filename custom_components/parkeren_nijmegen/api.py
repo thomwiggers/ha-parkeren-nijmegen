@@ -157,7 +157,10 @@ class NijmegenParkingAPI:
                 if _retry and self._username and self._password:
                     await self.login(self._username, self._password)
                     return await self._post(endpoint, payload, _retry=False)
-                raise AuthError(f"Authentication failed ({resp.status} on {endpoint})")
+                body = await self._safe_body(resp)
+                raise AuthError(
+                    f"Authentication failed ({resp.status} on {endpoint}): {body}"
+                )
             if resp.status == 500 and "text/html" in content_type:
                 # Nijmegen returns 500+HTML when the session cookie has expired.
                 if _retry and self._username and self._password:
@@ -165,8 +168,18 @@ class NijmegenParkingAPI:
                     return await self._post(endpoint, payload, _retry=False)
                 raise AuthError("Session expired and re-authentication failed")
             if not resp.ok:
-                raise ProviderError(f"Request failed: {resp.status}")
+                body = await self._safe_body(resp)
+                raise ProviderError(f"Request failed: {resp.status}: {body}")
             return await resp.json(content_type=None)
+
+    @staticmethod
+    async def _safe_body(resp: aiohttp.ClientResponse, limit: int = 300) -> str:
+        try:
+            text = await resp.text()
+        except Exception:
+            return "<unreadable body>"
+        text = text.strip()
+        return text[:limit] if text else "<empty body>"
 
     def _extract_permit(self, data: dict) -> dict:
         permits = data.get("Permits")
