@@ -25,6 +25,43 @@ def test_normalize_plate():
     assert _normalize_plate("AB12CD") == "AB12CD"
 
 
+async def test_get_xsrf_token_matches_host_prefixed_cookie(api_client):
+    """Nijmegen's portal sets `__Host-Xsrf-DVSPortal`, but app.env.js still
+    advertises the bare `Xsrf-DVSPortal` name. Token lookup must find the
+    cookie regardless of the `__Host-` security prefix."""
+    from yarl import URL
+
+    from custom_components.parkeren_nijmegen.const import BASE_URL
+
+    api_client._xsrf_cookie_name = "Xsrf-DVSPortal"
+    api_client._session.cookie_jar.update_cookies(
+        {"__Host-Xsrf-DVSPortal": "some%3Dtoken"}, response_url=URL(BASE_URL)
+    )
+
+    assert api_client._get_xsrf_token() == "some=token"
+
+
+async def test_add_favorite_sends_xsrf_header_from_host_prefixed_cookie(api_client):
+    """Write endpoints reject requests missing X-XSRF-TOKEN; the header must
+    be derived from the real (possibly __Host--prefixed) cookie name."""
+    from yarl import URL
+
+    from custom_components.parkeren_nijmegen.const import API_BASE, BASE_URL
+
+    api_client._xsrf_cookie_name = "Xsrf-DVSPortal"
+    api_client._session.cookie_jar.update_cookies(
+        {"__Host-Xsrf-DVSPortal": "some%3Dtoken"}, response_url=URL(BASE_URL)
+    )
+
+    with aioresponses() as m:
+        upsert_url = f"{BASE_URL}{API_BASE}/permitmedialicenseplate/upsert"
+        m.post(upsert_url, payload={})
+        await api_client.add_favorite("AB-12-CD")
+
+        request = m.requests[("POST", URL(upsert_url))][0]
+        assert request.kwargs["headers"]["X-XSRF-TOKEN"] == "some=token"
+
+
 async def test_fetch_all_success(api_client):
     with aioresponses() as m:
         m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)

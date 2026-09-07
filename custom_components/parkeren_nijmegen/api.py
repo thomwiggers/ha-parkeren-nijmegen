@@ -82,6 +82,17 @@ class NijmegenParkingAPI:
         cookies = self._session.cookie_jar.filter_cookies(URL(BASE_URL))
         cookie = cookies.get(self._xsrf_cookie_name)
         if cookie is None:
+            # Nijmegen sometimes serves this cookie with a `__Host-` security
+            # prefix that app.env.js doesn't advertise; match by suffix too.
+            cookie = next(
+                (
+                    c
+                    for name, c in cookies.items()
+                    if name.endswith(self._xsrf_cookie_name)
+                ),
+                None,
+            )
+        if cookie is None:
             return None
         # Cookie value may be URL-encoded
         return urllib.parse.unquote(cookie.value)
