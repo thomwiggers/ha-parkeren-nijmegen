@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.2.1 (2026-09-07)
+
+### Bug Fixes
+
+- Match __Host-prefixed XSRF cookie on write endpoints
+  ([`e04eecf`](https://github.com/thomwiggers/ha-parkeren-nijmegen/commit/e04eecf985295c8d5b85fa85ae8d1a94e4a696f8))
+
+Nijmegen's portal now sets the CSRF cookie as __Host-Xsrf-DVSPortal, but app.env.js still advertises
+  the bare Xsrf-DVSPortal name. Cookie lookup missed it, so X-XSRF-TOKEN was never sent. Read-only
+  getbase doesn't enforce CSRF so it kept working, but reservation/create and
+  permitmedialicenseplate/upsert do, and rejected every write with a bare 401. Match by suffix as a
+  fallback when the exact name misses.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+
 ## v0.2.0 (2026-07-30)
 
 ### Documentation
