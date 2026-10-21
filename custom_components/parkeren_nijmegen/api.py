@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import urllib.parse
 from datetime import UTC, datetime
@@ -11,6 +12,8 @@ from yarl import URL
 from .const import API_BASE, APP_BASE, BASE_URL
 from .exceptions import AuthError, ProviderError
 from .models import Favorite, Permit, Reservation, ZoneBlock
+
+_LOGGER = logging.getLogger(__name__)
 
 _XSRF_RE = re.compile(r"window\.__env\.xsrfCookieName\s*=\s*['\"]([^'\"]+)['\"]")
 _TZ = ZoneInfo("Europe/Amsterdam")
@@ -145,7 +148,12 @@ class NijmegenParkingAPI:
                 )
 
     async def _post(
-        self, endpoint: str, payload: dict | None = None, *, _retry: bool = True
+        self,
+        endpoint: str,
+        payload: dict | None = None,
+        *,
+        _retry: bool = True,
+        _xsrf_retry: bool = True,
     ) -> dict:
         """Make an authenticated POST request.
 
@@ -163,9 +171,18 @@ class NijmegenParkingAPI:
         ) as resp:
             content_type = resp.headers.get("Content-Type", "")
             if resp.status in (401, 403):
+                # The XSRF token is rotated after login; the rejecting response
+                # carries the fresh cookie. Resend once with it before
+                # assuming the session itself is gone.
+                if _xsrf_retry and self._get_xsrf_token() != xsrf:
+                    _LOGGER.debug("XSRF token rotated on %s, retrying", endpoint)
+                    return await self._post(
+                        endpoint, payload, _retry=_retry, _xsrf_retry=False
+                    )
                 # Some endpoints (e.g. permitmedialicenseplate) return 401 or
                 # 403 on session expiry instead of 500+HTML.
                 if _retry and self._username and self._password:
+                    _LOGGER.debug("%s on %s, re-authenticating", resp.status, endpoint)
                     await self.login(self._username, self._password)
                     return await self._post(endpoint, payload, _retry=False)
                 raise AuthError(f"Authentication failed ({resp.status} on {endpoint})")
