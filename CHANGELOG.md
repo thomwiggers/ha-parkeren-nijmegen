@@ -1,6 +1,49 @@
 # CHANGELOG
 
 
+## v0.2.2 (2026-10-21)
+
+### Bug Fixes
+
+- Refresh XSRF token after login instead of reusing the stale one
+  ([#7](https://github.com/thomwiggers/ha-parkeren-nijmegen/pull/7),
+  [`435f6fa`](https://github.com/thomwiggers/ha-parkeren-nijmegen/commit/435f6fa2c28bca97e71db0a6b3dd9c91c65065e3))
+
+Alternative to #6. That PR waits for a write to be rejected and resends it with the token the
+  rejection set. This PR fetches a fresh XSRF token after login instead.
+
+**Cause:** the portal binds the XSRF token to the logged-in identity. After a re-login, the cookie
+  we held was no longer valid, so the first write got a 401. That's why adding a car failed on the
+  first click and worked on the second.
+
+**Fix (in `api.py`):** - After a successful login, `login()` deletes the XSRF cookie. - When
+  `_get_xsrf_token()` finds no cookie, it sends `GET /api/login/info`. This read-only call sets a
+  fresh token cookie. - The refresh can't happen before login, because anonymous requests never set
+  the XSRF cookie. - `GET /api/login` isn't used for this because it clears the session cookie. -
+  `login()` no longer sends an `X-XSRF-TOKEN` header.
+
+**Session isolation:** the integration now has its own aiohttp session and cookie jar instead of the
+  one Home Assistant shares across all integrations. - Each config entry gets a dedicated session,
+  which HA detaches when the entry unloads. - The config flow uses a short-lived session that is
+  detached after use.
+
+**Not verified live:** I have no credentials, so I haven't confirmed that `login/info` returns the
+  fresh cookie for a logged-in session.
+
+**Tests:** - The `api_client` fixture now holds an XSRF cookie. - Existing re-login tests now also
+  mock the refresh call. - New regression test: a write that gets 401, re-login, then a refresh. It
+  checks that the retried write uses the fresh token. It fails if `login()` doesn't delete the
+  cookie. - 51 tests pass and ruff is clean.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_019JnbqHtQcV2zztLvSnqbZU
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.2.1 (2026-09-07)
 
 ### Bug Fixes
