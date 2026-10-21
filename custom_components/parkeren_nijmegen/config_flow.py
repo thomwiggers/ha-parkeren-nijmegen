@@ -92,7 +92,12 @@ class NijmegenConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _validate_credentials(
         self, username: str, password: str
     ) -> tuple[str, int]:
-        session = aiohttp_client.async_get_clientsession(self.hass)
-        api = NijmegenParkingAPI(session)
-        await api.login(username, password)
+        session = aiohttp_client.async_create_clientsession(
+            self.hass, auto_cleanup=False
+        )
+        try:
+            api = NijmegenParkingAPI(session)
+            await api.login(username, password)
+        finally:
+            session.detach()
         return api.permit_media_code or username, api.permit_media_type_id

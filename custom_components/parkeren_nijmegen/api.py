@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import urllib.parse
 from datetime import UTC, datetime
+from http.cookies import Morsel
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -78,7 +79,7 @@ class NijmegenParkingAPI:
         except Exception:
             pass
 
-    def _get_xsrf_token(self) -> str | None:
+    def _find_xsrf_cookie(self) -> Morsel[str] | None:
         cookies = self._session.cookie_jar.filter_cookies(URL(BASE_URL))
         cookie = cookies.get(self._xsrf_cookie_name)
         if cookie is None:
@@ -92,6 +93,24 @@ class NijmegenParkingAPI:
                 ),
                 None,
             )
+        return cookie
+
+    async def _get_xsrf_token(self) -> str | None:
+        """Return the XSRF token, fetching a fresh one if we hold none.
+
+        The portal binds the token to the authenticated identity, so login()
+        drops the one it held, and anonymous requests don't issue one at all.
+        Any authenticated request sets a fresh cookie; login/info is a cheap,
+        side-effect-free GET.
+        """
+        cookie = self._find_xsrf_cookie()
+        if cookie is None:
+            async with self._session.get(
+                f"{BASE_URL}{API_BASE}/login/info", headers=_DEFAULT_HEADERS
+            ) as resp:
+                if not resp.ok:
+                    raise ProviderError(f"XSRF token refresh failed: {resp.status}")
+            cookie = self._find_xsrf_cookie()
         if cookie is None:
             return None
         # Cookie value may be URL-encoded
@@ -107,10 +126,6 @@ class NijmegenParkingAPI:
         await self._discover_xsrf_cookie_name()
 
         headers = {**_DEFAULT_HEADERS}
-        xsrf = self._get_xsrf_token()
-        if xsrf:
-            headers["X-XSRF-TOKEN"] = xsrf
-
         payload = {
             "identifier": username,
             "loginMethod": 2,
@@ -144,6 +159,9 @@ class NijmegenParkingAPI:
                     medias[0].get("Code") or self._permit_media_code
                 )
 
+        # Any XSRF token held now predates this login; writes would reject it.
+        self._session.cookie_jar.clear(lambda m: m.key.endswith(self._xsrf_cookie_name))
+
     async def _post(
         self, endpoint: str, payload: dict | None = None, *, _retry: bool = True
     ) -> dict:
@@ -152,7 +170,7 @@ class NijmegenParkingAPI:
         Auth is via session cookie (DVS-Cookie).
         """
         headers = {**_DEFAULT_HEADERS}
-        xsrf = self._get_xsrf_token()
+        xsrf = await self._get_xsrf_token()
         if xsrf:
             headers["X-XSRF-TOKEN"] = xsrf
 

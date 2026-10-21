@@ -40,7 +40,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    session = aiohttp_client.async_get_clientsession(hass)
+    # Own cookie jar: the portal's session and XSRF cookies must not be
+    # shared with (or cleared from) other integrations. Detached on unload.
+    session = aiohttp_client.async_create_clientsession(hass)
     api = NijmegenParkingAPI(
         session,
         permit_media_code=entry.data.get(CONF_PERMIT_MEDIA_CODE),

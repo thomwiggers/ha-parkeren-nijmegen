@@ -14,6 +14,7 @@ from tests.conftest import (
 
 GETBASE_URL = f"{BASE_URL}{API_BASE}/login/getbase"
 LOGIN_URL = f"{BASE_URL}{API_BASE}/login"
+LOGIN_INFO_URL = f"{BASE_URL}{API_BASE}/login/info"
 APP_ENV_URL = f"{BASE_URL}{APP_BASE}/app.env.js"
 
 
@@ -38,7 +39,7 @@ async def test_get_xsrf_token_matches_host_prefixed_cookie(api_client):
         {"__Host-Xsrf-DVSPortal": "some%3Dtoken"}, response_url=URL(BASE_URL)
     )
 
-    assert api_client._get_xsrf_token() == "some=token"
+    assert await api_client._get_xsrf_token() == "some=token"
 
 
 async def test_add_favorite_sends_xsrf_header_from_host_prefixed_cookie(api_client):
@@ -88,6 +89,7 @@ async def test_fetch_all_reauths_on_401(api_client):
             body='window.__env.xsrfCookieName = "Xsrf-DVSPortal"',
         )
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
         permit, _, _ = await api_client.fetch_all()
     assert permit.remaining_balance == 120
@@ -99,6 +101,7 @@ async def test_fetch_all_raises_auth_if_401_retry_also_fails(api_client):
         m.post(GETBASE_URL, status=401)
         m.get(APP_ENV_URL, status=404)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(GETBASE_URL, status=401)
         with pytest.raises(AuthError):
             await api_client.fetch_all()
@@ -114,6 +117,7 @@ async def test_fetch_all_reauths_on_403(api_client):
             body='window.__env.xsrfCookieName = "Xsrf-DVSPortal"',
         )
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
         permit, _, _ = await api_client.fetch_all()
     assert permit.remaining_balance == 120
@@ -125,6 +129,7 @@ async def test_fetch_all_raises_auth_if_403_retry_also_fails(api_client):
         m.post(GETBASE_URL, status=403)
         m.get(APP_ENV_URL, status=404)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(GETBASE_URL, status=403)
         with pytest.raises(AuthError):
             await api_client.fetch_all()
@@ -153,6 +158,7 @@ async def test_fetch_all_reauths_on_500_html(api_client):
         m.get(APP_ENV_URL, status=200, body=xsrf_body)
         # Re-login succeeds
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         # Retry getbase succeeds
         m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
 
@@ -172,6 +178,7 @@ async def test_fetch_all_raises_auth_if_retry_also_fails(api_client):
         )
         m.get(APP_ENV_URL, status=404)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(
             GETBASE_URL,
             status=500,
@@ -278,3 +285,36 @@ async def test_parse_ts_utc_z_suffix():
     assert dt.tzinfo == UTC
     assert dt.hour == 8
     assert dt.day == 2
+
+
+UPSERT_URL = f"{BASE_URL}{API_BASE}/permitmedialicenseplate/upsert"
+
+
+async def test_relogin_refreshes_xsrf_token_before_retrying_write(api_client):
+    """The portal binds the XSRF token to the logged-in identity. Re-login must
+    fetch a fresh token (GET login/info) so the retried write succeeds on the
+    first attempt instead of needing a second click."""
+    from yarl import URL
+
+    api_client._session.cookie_jar.update_cookies(
+        {"__Host-Xsrf-DVSPortal": "stale"}, response_url=URL(BASE_URL)
+    )
+
+    def issue_fresh_token(*_args, **_kwargs):
+        # aioresponses doesn't feed Set-Cookie into the session's jar.
+        api_client._session.cookie_jar.update_cookies(
+            {"__Host-Xsrf-DVSPortal": "fresh%3D"}, response_url=URL(BASE_URL)
+        )
+
+    with aioresponses() as m:
+        m.post(UPSERT_URL, status=401)
+        m.get(APP_ENV_URL, status=404)
+        m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.get(LOGIN_INFO_URL, payload="ok", callback=issue_fresh_token)
+        m.post(UPSERT_URL, payload={})
+        await api_client.add_favorite("AB-12-CD")
+
+        upserts = m.requests[("POST", URL(UPSERT_URL))]
+        assert len(upserts) == 2
+        assert upserts[0].kwargs["headers"]["X-XSRF-TOKEN"] == "stale"
+        assert upserts[1].kwargs["headers"]["X-XSRF-TOKEN"] == "fresh="
