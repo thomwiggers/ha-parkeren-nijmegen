@@ -39,7 +39,7 @@ async def test_get_xsrf_token_matches_host_prefixed_cookie(api_client):
         {"__Host-Xsrf-DVSPortal": "some%3Dtoken"}, response_url=URL(BASE_URL)
     )
 
-    assert api_client._get_xsrf_token() == "some=token"
+    assert api_client._read_xsrf_cookie() == "some=token"
 
 
 async def test_add_favorite_sends_xsrf_header_from_host_prefixed_cookie(api_client):
@@ -197,7 +197,6 @@ async def test_login_sets_media_code(http_session):
         xsrf_body = 'window.__env.xsrfCookieName = "Xsrf-DVSPortal"'
         m.get(APP_ENV_URL, status=200, body=xsrf_body)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
 
         await api.login("123456", "testpass")
 
