@@ -97,6 +97,30 @@ class NijmegenParkingAPI:
         # Cookie value may be URL-encoded
         return urllib.parse.unquote(cookie.value)
 
+    def _clear_xsrf_cookie(self) -> None:
+        """Drop the portal's XSRF cookie(s) from the (possibly shared) jar."""
+        host = URL(BASE_URL).host
+        self._session.cookie_jar.clear(
+            lambda m: (
+                m.key.endswith(self._xsrf_cookie_name) and m["domain"] in ("", host)
+            )
+        )
+
+    async def _refresh_xsrf_token(self) -> None:
+        """Obtain an XSRF token bound to the current session.
+
+        The portal rotates the token on authentication; the one held from
+        before login is rejected (401) by write endpoints. Like the web app,
+        follow login with a read-only getbase, which doesn't enforce CSRF and
+        issues the fresh token cookie.
+        """
+        headers = {**_DEFAULT_HEADERS}
+        async with self._session.post(
+            f"{BASE_URL}{API_BASE}/login/getbase", json={}, headers=headers
+        ) as resp:
+            if not resp.ok:
+                raise ProviderError(f"XSRF token refresh failed: {resp.status}")
+
     async def login(self, username: str, password: str) -> None:
         """Authenticate against Nijmegen DVS Portal.
 
@@ -105,12 +129,11 @@ class NijmegenParkingAPI:
         self._username = username
         self._password = password
         await self._discover_xsrf_cookie_name()
+        # Any XSRF token we hold belongs to the previous session; never send
+        # it again. A fresh one is fetched once login succeeds.
+        self._clear_xsrf_cookie()
 
         headers = {**_DEFAULT_HEADERS}
-        xsrf = self._get_xsrf_token()
-        if xsrf:
-            headers["X-XSRF-TOKEN"] = xsrf
-
         payload = {
             "identifier": username,
             "loginMethod": 2,
@@ -143,6 +166,8 @@ class NijmegenParkingAPI:
                 self._permit_media_code = (
                     medias[0].get("Code") or self._permit_media_code
                 )
+
+        await self._refresh_xsrf_token()
 
     async def _post(
         self, endpoint: str, payload: dict | None = None, *, _retry: bool = True
