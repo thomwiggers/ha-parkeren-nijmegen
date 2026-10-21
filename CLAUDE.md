@@ -33,7 +33,7 @@ Standalone Home Assistant custom integration for Nijmegen visitor parking. No ex
 
 ### Auth flow
 
-Cookie-based (not token). `login()` POSTs to `/DVSPortal/api/login` with `{identifier, loginMethod: 2, password, permitMediaTypeID}`. The server sets a `DVS-Cookie` session cookie and an `Xsrf-DVSPortal` CSRF cookie on the response. The XSRF cookie name is discovered from `/DVSPortal/app.env.js` before login. All subsequent requests carry the cookies automatically (aiohttp jar) plus an explicit `X-XSRF-TOKEN` header whose value is URL-decoded from the cookie. The portal rotates the XSRF token on login, so `login()` first drops any held XSRF cookie, then follows a successful login with a read-only `getbase` (no CSRF check) that issues the fresh token — the same sequence the web app uses. Without this, the first write after a re-login is rejected with 401.
+Cookie-based (not token). `login()` POSTs to `/DVSPortal/api/login` with `{identifier, loginMethod: 2, password, permitMediaTypeID}`. The server sets a `DVS-Cookie` session cookie and an `Xsrf-DVSPortal` CSRF cookie on the response. The XSRF cookie name is discovered from `/DVSPortal/app.env.js` before login. All subsequent requests carry the cookies automatically (a dedicated aiohttp session per config entry, so the jar is not shared with other integrations) plus an explicit `X-XSRF-TOKEN` header whose value is URL-decoded from the cookie. The portal rotates the XSRF token on login, so `login()` first drops any held XSRF cookie, then follows a successful login with a read-only `getbase` (no CSRF check) that issues the fresh token — the same sequence the web app uses. Without this, the first write after a re-login is rejected with 401.
 
 ### Module responsibilities
 

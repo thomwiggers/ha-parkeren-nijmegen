@@ -98,13 +98,8 @@ class NijmegenParkingAPI:
         return urllib.parse.unquote(cookie.value)
 
     def _clear_xsrf_cookie(self) -> None:
-        """Drop the portal's XSRF cookie(s) from the (possibly shared) jar."""
-        host = URL(BASE_URL).host
-        self._session.cookie_jar.clear(
-            lambda m: (
-                m.key.endswith(self._xsrf_cookie_name) and m["domain"] in ("", host)
-            )
-        )
+        """Drop the portal's XSRF cookie(s), keeping the session cookie."""
+        self._session.cookie_jar.clear(lambda m: m.key.endswith(self._xsrf_cookie_name))
 
     async def _refresh_xsrf_token(self) -> None:
         """Obtain an XSRF token bound to the current session.

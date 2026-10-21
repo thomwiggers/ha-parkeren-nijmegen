@@ -324,8 +324,7 @@ async def test_relogin_refreshes_xsrf_token_before_retrying_write(api_client):
         assert upserts[1].kwargs["headers"]["X-XSRF-TOKEN"] == "fresh="
 
 
-async def test_clear_xsrf_cookie_leaves_other_cookies(api_client):
-    """HA shares one cookie jar across integrations; only our XSRF cookie goes."""
+async def test_clear_xsrf_cookie_keeps_session_cookie(api_client):
     from yarl import URL
 
     jar = api_client._session.cookie_jar
@@ -333,12 +332,8 @@ async def test_clear_xsrf_cookie_leaves_other_cookies(api_client):
         {"__Host-Xsrf-DVSPortal": "stale", "__Host-DVS-Cookie": "session"},
         response_url=URL(BASE_URL),
     )
-    jar.update_cookies(
-        {"__Host-Xsrf-DVSPortal": "other"}, response_url=URL("https://example.com")
-    )
 
     api_client._clear_xsrf_cookie()
 
     assert api_client._get_xsrf_token() is None
     assert "__Host-DVS-Cookie" in jar.filter_cookies(URL(BASE_URL))
-    assert "__Host-Xsrf-DVSPortal" in jar.filter_cookies(URL("https://example.com"))
