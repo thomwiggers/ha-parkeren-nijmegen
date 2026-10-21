@@ -97,21 +97,17 @@ class NijmegenParkingAPI:
         # Cookie value may be URL-encoded
         return urllib.parse.unquote(cookie.value)
 
-    def _clear_xsrf_cookie(self) -> None:
-        """Drop the portal's XSRF cookie(s), keeping the session cookie."""
-        self._session.cookie_jar.clear(lambda m: m.key.endswith(self._xsrf_cookie_name))
-
     async def _refresh_xsrf_token(self) -> None:
-        """Obtain an XSRF token bound to the current session.
+        """Obtain an XSRF token bound to the logged-in session.
 
-        The portal rotates the token on authentication; the one held from
-        before login is rejected (401) by write endpoints. Like the web app,
-        follow login with a read-only getbase, which doesn't enforce CSRF and
-        issues the fresh token cookie.
+        The portal binds the token to the authenticated identity, so one held
+        from before (or issued during) login is rejected (401) by write
+        endpoints. Anonymous requests don't issue a token at all, so this has
+        to happen after login: any authenticated request sets a fresh cookie,
+        and login/info is a cheap, side-effect-free GET.
         """
-        headers = {**_DEFAULT_HEADERS}
-        async with self._session.post(
-            f"{BASE_URL}{API_BASE}/login/getbase", json={}, headers=headers
+        async with self._session.get(
+            f"{BASE_URL}{API_BASE}/login/info", headers=_DEFAULT_HEADERS
         ) as resp:
             if not resp.ok:
                 raise ProviderError(f"XSRF token refresh failed: {resp.status}")
@@ -124,11 +120,12 @@ class NijmegenParkingAPI:
         self._username = username
         self._password = password
         await self._discover_xsrf_cookie_name()
-        # Any XSRF token we hold belongs to the previous session; never send
-        # it again. A fresh one is fetched once login succeeds.
-        self._clear_xsrf_cookie()
 
         headers = {**_DEFAULT_HEADERS}
+        xsrf = self._get_xsrf_token()
+        if xsrf:
+            headers["X-XSRF-TOKEN"] = xsrf
+
         payload = {
             "identifier": username,
             "loginMethod": 2,

@@ -14,6 +14,7 @@ from tests.conftest import (
 
 GETBASE_URL = f"{BASE_URL}{API_BASE}/login/getbase"
 LOGIN_URL = f"{BASE_URL}{API_BASE}/login"
+LOGIN_INFO_URL = f"{BASE_URL}{API_BASE}/login/info"
 APP_ENV_URL = f"{BASE_URL}{APP_BASE}/app.env.js"
 
 
@@ -88,7 +89,7 @@ async def test_fetch_all_reauths_on_401(api_client):
             body='window.__env.xsrfCookieName = "Xsrf-DVSPortal"',
         )
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)  # XSRF refresh
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
         permit, _, _ = await api_client.fetch_all()
     assert permit.remaining_balance == 120
@@ -100,7 +101,7 @@ async def test_fetch_all_raises_auth_if_401_retry_also_fails(api_client):
         m.post(GETBASE_URL, status=401)
         m.get(APP_ENV_URL, status=404)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)  # XSRF refresh
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(GETBASE_URL, status=401)
         with pytest.raises(AuthError):
             await api_client.fetch_all()
@@ -116,7 +117,7 @@ async def test_fetch_all_reauths_on_403(api_client):
             body='window.__env.xsrfCookieName = "Xsrf-DVSPortal"',
         )
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)  # XSRF refresh
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
         permit, _, _ = await api_client.fetch_all()
     assert permit.remaining_balance == 120
@@ -128,7 +129,7 @@ async def test_fetch_all_raises_auth_if_403_retry_also_fails(api_client):
         m.post(GETBASE_URL, status=403)
         m.get(APP_ENV_URL, status=404)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)  # XSRF refresh
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(GETBASE_URL, status=403)
         with pytest.raises(AuthError):
             await api_client.fetch_all()
@@ -157,7 +158,7 @@ async def test_fetch_all_reauths_on_500_html(api_client):
         m.get(APP_ENV_URL, status=200, body=xsrf_body)
         # Re-login succeeds
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)  # XSRF refresh
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         # Retry getbase succeeds
         m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)
 
@@ -177,7 +178,7 @@ async def test_fetch_all_raises_auth_if_retry_also_fails(api_client):
         )
         m.get(APP_ENV_URL, status=404)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)  # XSRF refresh
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
         m.post(
             GETBASE_URL,
             status=500,
@@ -196,7 +197,7 @@ async def test_login_sets_media_code(http_session):
         xsrf_body = 'window.__env.xsrfCookieName = "Xsrf-DVSPortal"'
         m.get(APP_ENV_URL, status=200, body=xsrf_body)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA)  # XSRF refresh
+        m.get(LOGIN_INFO_URL, payload="ok")  # XSRF refresh
 
         await api.login("123456", "testpass")
 
@@ -291,9 +292,9 @@ UPSERT_URL = f"{BASE_URL}{API_BASE}/permitmedialicenseplate/upsert"
 
 
 async def test_relogin_refreshes_xsrf_token_before_retrying_write(api_client):
-    """The portal rotates the XSRF token on login. Re-login must drop the stale
-    token and fetch the fresh one (via getbase, like the web app) so the
-    retried write succeeds on the first attempt."""
+    """The portal binds the XSRF token to the logged-in identity. Re-login must
+    fetch a fresh token (GET login/info) so the retried write succeeds on the
+    first attempt instead of needing a second click."""
     from yarl import URL
 
     api_client._session.cookie_jar.update_cookies(
@@ -310,30 +311,11 @@ async def test_relogin_refreshes_xsrf_token_before_retrying_write(api_client):
         m.post(UPSERT_URL, status=401)
         m.get(APP_ENV_URL, status=404)
         m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
-        m.post(GETBASE_URL, payload=SAMPLE_PERMIT_DATA, callback=issue_fresh_token)
+        m.get(LOGIN_INFO_URL, payload="ok", callback=issue_fresh_token)
         m.post(UPSERT_URL, payload={})
         await api_client.add_favorite("AB-12-CD")
 
-        login = m.requests[("POST", URL(LOGIN_URL))][0]
-        assert "X-XSRF-TOKEN" not in login.kwargs["headers"]
-        refresh = m.requests[("POST", URL(GETBASE_URL))][0]
-        assert "X-XSRF-TOKEN" not in refresh.kwargs["headers"]
         upserts = m.requests[("POST", URL(UPSERT_URL))]
         assert len(upserts) == 2
         assert upserts[0].kwargs["headers"]["X-XSRF-TOKEN"] == "stale"
         assert upserts[1].kwargs["headers"]["X-XSRF-TOKEN"] == "fresh="
-
-
-async def test_clear_xsrf_cookie_keeps_session_cookie(api_client):
-    from yarl import URL
-
-    jar = api_client._session.cookie_jar
-    jar.update_cookies(
-        {"__Host-Xsrf-DVSPortal": "stale", "__Host-DVS-Cookie": "session"},
-        response_url=URL(BASE_URL),
-    )
-
-    api_client._clear_xsrf_cookie()
-
-    assert api_client._get_xsrf_token() is None
-    assert "__Host-DVS-Cookie" in jar.filter_cookies(URL(BASE_URL))
