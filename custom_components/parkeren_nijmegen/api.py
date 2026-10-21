@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import urllib.parse
 from datetime import UTC, datetime
+from http.cookies import Morsel
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -55,9 +56,6 @@ class NijmegenParkingAPI:
         self._password: str | None = None
         self._permit_media_type_id: int = permit_media_type_id
         self._permit_media_code: str | None = permit_media_code
-        # Set by login(): the jar still holds the previous session's XSRF
-        # cookie, which writes reject. See _get_xsrf_token.
-        self._xsrf_stale: bool = False
 
     @property
     def permit_media_code(self) -> str | None:
@@ -81,23 +79,7 @@ class NijmegenParkingAPI:
         except Exception:
             pass
 
-    async def _get_xsrf_token(self) -> str | None:
-        """Return an XSRF token valid for the current login session.
-
-        The portal binds the token to the authenticated identity, so one held
-        from before (or issued during) login is rejected (401) by write
-        endpoints, and anonymous requests don't issue one at all. After each
-        login, refresh it once: any authenticated request sets a fresh
-        cookie, and login/info is a cheap, side-effect-free GET.
-        """
-        if self._xsrf_stale:
-            async with self._session.get(
-                f"{BASE_URL}{API_BASE}/login/info", headers=_DEFAULT_HEADERS
-            ) as resp:
-                if not resp.ok:
-                    raise ProviderError(f"XSRF token refresh failed: {resp.status}")
-            self._xsrf_stale = False
-
+    def _find_xsrf_cookie(self) -> Morsel[str] | None:
         cookies = self._session.cookie_jar.filter_cookies(URL(BASE_URL))
         cookie = cookies.get(self._xsrf_cookie_name)
         if cookie is None:
@@ -111,6 +93,24 @@ class NijmegenParkingAPI:
                 ),
                 None,
             )
+        return cookie
+
+    async def _get_xsrf_token(self) -> str | None:
+        """Return the XSRF token, fetching a fresh one if we hold none.
+
+        The portal binds the token to the authenticated identity, so login()
+        drops the one it held, and anonymous requests don't issue one at all.
+        Any authenticated request sets a fresh cookie; login/info is a cheap,
+        side-effect-free GET.
+        """
+        cookie = self._find_xsrf_cookie()
+        if cookie is None:
+            async with self._session.get(
+                f"{BASE_URL}{API_BASE}/login/info", headers=_DEFAULT_HEADERS
+            ) as resp:
+                if not resp.ok:
+                    raise ProviderError(f"XSRF token refresh failed: {resp.status}")
+            cookie = self._find_xsrf_cookie()
         if cookie is None:
             return None
         # Cookie value may be URL-encoded
@@ -159,7 +159,8 @@ class NijmegenParkingAPI:
                     medias[0].get("Code") or self._permit_media_code
                 )
 
-        self._xsrf_stale = True
+        # Any XSRF token held now predates this login; writes would reject it.
+        self._session.cookie_jar.clear(lambda m: m.key.endswith(self._xsrf_cookie_name))
 
     async def _post(
         self, endpoint: str, payload: dict | None = None, *, _retry: bool = True

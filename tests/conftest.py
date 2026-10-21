@@ -1,7 +1,9 @@
 import aiohttp
 import pytest
+from yarl import URL
 
 from custom_components.parkeren_nijmegen.api import NijmegenParkingAPI
+from custom_components.parkeren_nijmegen.const import BASE_URL
 
 SAMPLE_PERMIT_DATA = {
     "Name": "",
@@ -100,4 +102,7 @@ async def api_client(http_session):
     api._password = "testpass"
     api._permit_media_type_id = 7
     api._permit_media_code = "CARD-1"
+    http_session.cookie_jar.update_cookies(
+        {"__Host-Xsrf-DVSPortal": "token"}, response_url=URL(BASE_URL)
+    )
     yield api
