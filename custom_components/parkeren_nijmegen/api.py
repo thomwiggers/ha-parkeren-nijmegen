@@ -55,7 +55,9 @@ class NijmegenParkingAPI:
         self._password: str | None = None
         self._permit_media_type_id: int = permit_media_type_id
         self._permit_media_code: str | None = permit_media_code
-        self._xsrf_stale: bool = False  # set on login; see _get_xsrf_token
+        # Set by login(): the jar still holds the previous session's XSRF
+        # cookie, which writes reject. See _get_xsrf_token.
+        self._xsrf_stale: bool = False
 
     @property
     def permit_media_code(self) -> str | None:
@@ -79,7 +81,23 @@ class NijmegenParkingAPI:
         except Exception:
             pass
 
-    def _read_xsrf_cookie(self) -> str | None:
+    async def _get_xsrf_token(self) -> str | None:
+        """Return an XSRF token valid for the current login session.
+
+        The portal binds the token to the authenticated identity, so one held
+        from before (or issued during) login is rejected (401) by write
+        endpoints, and anonymous requests don't issue one at all. After each
+        login, refresh it once: any authenticated request sets a fresh
+        cookie, and login/info is a cheap, side-effect-free GET.
+        """
+        if self._xsrf_stale:
+            async with self._session.get(
+                f"{BASE_URL}{API_BASE}/login/info", headers=_DEFAULT_HEADERS
+            ) as resp:
+                if not resp.ok:
+                    raise ProviderError(f"XSRF token refresh failed: {resp.status}")
+            self._xsrf_stale = False
+
         cookies = self._session.cookie_jar.filter_cookies(URL(BASE_URL))
         cookie = cookies.get(self._xsrf_cookie_name)
         if cookie is None:
@@ -97,24 +115,6 @@ class NijmegenParkingAPI:
             return None
         # Cookie value may be URL-encoded
         return urllib.parse.unquote(cookie.value)
-
-    async def _get_xsrf_token(self) -> str | None:
-        """Return an XSRF token valid for the current login session.
-
-        The portal binds the token to the authenticated identity, so one held
-        from before (or issued during) login is rejected (401) by write
-        endpoints, and anonymous requests don't issue one at all. After each
-        login, refresh it once: any authenticated request sets a fresh
-        cookie, and login/info is a cheap, side-effect-free GET.
-        """
-        if self._xsrf_stale:
-            async with self._session.get(
-                f"{BASE_URL}{API_BASE}/login/info", headers=_DEFAULT_HEADERS
-            ) as resp:
-                if not resp.ok:
-                    raise ProviderError(f"XSRF token refresh failed: {resp.status}")
-            self._xsrf_stale = False
-        return self._read_xsrf_cookie()
 
     async def login(self, username: str, password: str) -> None:
         """Authenticate against Nijmegen DVS Portal.

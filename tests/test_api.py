@@ -39,7 +39,7 @@ async def test_get_xsrf_token_matches_host_prefixed_cookie(api_client):
         {"__Host-Xsrf-DVSPortal": "some%3Dtoken"}, response_url=URL(BASE_URL)
     )
 
-    assert api_client._read_xsrf_cookie() == "some=token"
+    assert await api_client._get_xsrf_token() == "some=token"
 
 
 async def test_add_favorite_sends_xsrf_header_from_host_prefixed_cookie(api_client):
