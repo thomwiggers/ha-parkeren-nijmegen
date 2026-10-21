@@ -278,3 +278,51 @@ async def test_parse_ts_utc_z_suffix():
     assert dt.tzinfo == UTC
     assert dt.hour == 8
     assert dt.day == 2
+
+
+UPSERT_URL = f"{BASE_URL}{API_BASE}/permitmedialicenseplate/upsert"
+
+
+def _set_xsrf(api_client, value):
+    from yarl import URL
+
+    api_client._session.cookie_jar.update_cookies(
+        {"__Host-Xsrf-DVSPortal": value}, response_url=URL(BASE_URL)
+    )
+
+
+async def test_add_favorite_retries_with_rotated_xsrf_after_relogin(api_client):
+    """After re-login the server rotates the XSRF token and rejects the first
+    write with 401, setting the fresh cookie on that response. The write must
+    be resent with the new token instead of failing (needing a second click)."""
+    from yarl import URL
+
+    _set_xsrf(api_client, "stale")
+
+    def rotate(*_args, **_kwargs):
+        _set_xsrf(api_client, "fresh")
+
+    with aioresponses() as m:
+        m.post(UPSERT_URL, status=401)
+        m.get(APP_ENV_URL, status=404)
+        m.post(LOGIN_URL, payload=SAMPLE_LOGIN_RESPONSE)
+        m.post(UPSERT_URL, status=401, callback=rotate)
+        m.post(UPSERT_URL, payload={})
+        await api_client.add_favorite("AB-12-CD")
+
+        requests = m.requests[("POST", URL(UPSERT_URL))]
+        assert len(requests) == 3
+        assert requests[-1].kwargs["headers"]["X-XSRF-TOKEN"] == "fresh"
+
+
+async def test_add_favorite_retries_with_rotated_xsrf_without_relogin(api_client):
+    """A 401 that rotates the XSRF token is resent without logging in again."""
+    _set_xsrf(api_client, "stale")
+
+    def rotate(*_args, **_kwargs):
+        _set_xsrf(api_client, "fresh")
+
+    with aioresponses() as m:
+        m.post(UPSERT_URL, status=401, callback=rotate)
+        m.post(UPSERT_URL, payload={})
+        await api_client.add_favorite("AB-12-CD")
